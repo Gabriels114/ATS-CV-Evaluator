@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -8,14 +7,14 @@ from rich.console import Console
 from . import __version__
 from .config import get_api_key
 from .errors import ATSError, ConfigurationError, UnparseableDocumentError
-from .extraction import ClaudeClient, extract_cv, extract_jd
+from .extraction import ClaudeClient, ExtractionMode, extract_cv, extract_jd
 from .parsers import parse_document
 from .reporting import render_report, to_json
 from .scoring import score
 
 app = typer.Typer(
     name="ats",
-    help="Personal ATS resume evaluator powered by Claude.",
+    help="Personal ATS resume evaluator — local or LLM-powered.",
     add_completion=False,
 )
 console = Console()
@@ -25,16 +24,24 @@ console = Console()
 def evaluate(
     cv_path: Path = typer.Argument(..., help="Path to your CV (PDF or DOCX)", metavar="CV"),
     jd_path: Path = typer.Argument(..., help="Path to the job description (TXT or MD)", metavar="JD"),
-    json_out: Optional[Path] = typer.Option(None, "--json", "-j", help="Export report as JSON to this path"),
-    model: str = typer.Option("claude-sonnet-4-6", "--model", "-m", help="Claude model to use"),
-    no_cache: bool = typer.Option(False, "--no-cache", help="Skip cached Claude responses"),
+    mode: ExtractionMode = typer.Option(
+        ExtractionMode.LOCAL, "--mode", "-M",
+        help="'local' = no API key needed · 'llm' = Claude for higher accuracy",
+    ),
+    json_out: Optional[Path] = typer.Option(None, "--json", "-j", help="Export report as JSON"),
+    model: str = typer.Option("claude-sonnet-4-6", "--model", "-m", help="Claude model (LLM mode only)"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Skip cached Claude responses (LLM mode only)"),
 ) -> None:
     """Evaluate a CV against a job description and produce an ATS score report."""
-    try:
-        api_key = get_api_key()
-    except ConfigurationError as exc:
-        console.print(f"[red]Configuration error:[/red] {exc}")
-        raise typer.Exit(3)
+    client: ClaudeClient | None = None
+
+    if mode == ExtractionMode.LLM:
+        try:
+            api_key = get_api_key()
+        except ConfigurationError as exc:
+            console.print(f"[red]Configuration error:[/red] {exc}")
+            raise typer.Exit(3)
+        client = ClaudeClient(api_key=api_key, model=model, use_cache=not no_cache)
 
     try:
         with console.status("[bold cyan]Parsing CV..."):
@@ -48,13 +55,12 @@ def evaluate(
         console.print(f"[red]Parse error:[/red] {exc}")
         raise typer.Exit(2)
 
-    client = ClaudeClient(api_key=api_key, model=model, use_cache=not no_cache)
-
+    mode_label = "[green]local[/green]" if mode == ExtractionMode.LOCAL else "[magenta]LLM (Claude)[/magenta]"
     try:
-        with console.status("[bold cyan]Extracting CV data via Claude..."):
-            cv_data = extract_cv(cv_doc.raw_text, cv_doc.quality, client)
-        with console.status("[bold cyan]Extracting JD requirements via Claude..."):
-            jd_data = extract_jd(jd_doc.raw_text, client)
+        with console.status(f"[bold cyan]Extracting CV data ({mode_label})..."):
+            cv_data = extract_cv(cv_doc.raw_text, cv_doc.quality, client=client, mode=mode)
+        with console.status(f"[bold cyan]Extracting JD requirements ({mode_label})..."):
+            jd_data = extract_jd(jd_doc.raw_text, client=client, mode=mode)
     except ATSError as exc:
         console.print(f"[red]Extraction error:[/red] {exc}")
         raise typer.Exit(1)
@@ -74,7 +80,7 @@ def serve(
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind"),
     port: int = typer.Option(8000, "--port", "-p", help="Port to listen on"),
 ) -> None:
-    """Start the web UI (requires: pip install ats-evaluator[web])."""
+    """Start the web UI (requires: pip install 'ats-evaluator[web]')."""
     try:
         import uvicorn
     except ImportError:
@@ -87,8 +93,9 @@ def serve(
 
 @app.command()
 def version() -> None:
-    """Show the version."""
+    """Show the version and available extraction modes."""
     console.print(f"ats-evaluator {__version__}")
+    console.print("[dim]Modes: local (default, no API key) · llm (Claude API)[/dim]")
 
 
 if __name__ == "__main__":

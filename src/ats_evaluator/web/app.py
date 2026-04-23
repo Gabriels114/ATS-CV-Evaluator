@@ -5,9 +5,9 @@ from typing import Annotated
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from ..config import MODEL_ID, get_api_key
-from ..errors import ATSError, ConfigurationError, UnparseableDocumentError
-from ..extraction import ClaudeClient, extract_cv, extract_jd
+from ..config import MODEL_ID
+from ..errors import ATSError, UnparseableDocumentError
+from ..extraction import ClaudeClient, ExtractionMode, extract_cv, extract_jd
 from ..parsers import parse_document
 from ..reporting.json_export import to_dict
 from ..scoring import score
@@ -26,13 +26,29 @@ async def evaluate(
     cv_file: Annotated[UploadFile, File(description="CV — PDF or DOCX")],
     jd_text: Annotated[str, Form(description="Job description text")] = "",
     jd_file: Annotated[UploadFile | None, File(description="JD — TXT or MD (optional)")] = None,
+    mode: Annotated[str, Form(description="'local' or 'llm'")] = "local",
+    api_key: Annotated[str, Form(description="Claude API key (LLM mode only)")] = "",
     model: Annotated[str, Form()] = MODEL_ID,
     no_cache: Annotated[bool, Form()] = False,
 ) -> JSONResponse:
+    # ── Resolve extraction mode ───────────────────────────────────────────────
     try:
-        api_key = get_api_key()
-    except ConfigurationError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        extraction_mode = ExtractionMode(mode.lower())
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid mode '{mode}'. Use 'local' or 'llm'.")
+
+    client: ClaudeClient | None = None
+    if extraction_mode == ExtractionMode.LLM:
+        resolved_key = api_key.strip()
+        if not resolved_key:
+            import os
+            resolved_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not resolved_key:
+            raise HTTPException(
+                status_code=422,
+                detail="LLM mode requires an API key. Enter it in the UI or set ANTHROPIC_API_KEY.",
+            )
+        client = ClaudeClient(api_key=resolved_key, model=model, use_cache=not no_cache)
 
     # ── Save CV to temp file ──────────────────────────────────────────────────
     cv_suffix = Path(cv_file.filename or "cv.pdf").suffix.lower()
@@ -67,12 +83,13 @@ async def evaluate(
         cv_path.unlink(missing_ok=True)
 
     # ── Extract + Score ───────────────────────────────────────────────────────
-    client = ClaudeClient(api_key=api_key, model=model, use_cache=not no_cache)
     try:
-        cv_data = extract_cv(cv_doc.raw_text, cv_doc.quality, client)
-        jd_data = extract_jd(resolved_jd_text, client)
+        cv_data = extract_cv(cv_doc.raw_text, cv_doc.quality, client=client, mode=extraction_mode)
+        jd_data = extract_jd(resolved_jd_text, client=client, mode=extraction_mode)
     except ATSError as exc:
         raise HTTPException(status_code=502, detail=f"Extraction error: {exc}")
 
     report = score(cv_data, jd_data)
-    return JSONResponse(to_dict(report))
+    result = to_dict(report)
+    result["extraction_mode"] = extraction_mode.value
+    return JSONResponse(result)

@@ -224,6 +224,25 @@ HTML_PAGE = """<!DOCTYPE html>
   }
 
   #results { display: none; }
+
+  .mode-row { margin-top: 16px; }
+  .mode-toggle { display: flex; gap: 10px; margin-top: 6px; }
+  .mode-opt {
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; padding: 10px 14px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    transition: border-color .15s, background .15s;
+    flex: 1;
+  }
+  .mode-opt:has(input:checked) { border-color: var(--accent); background: rgba(99,102,241,.05); }
+  .mode-opt input[type=radio] { display: none; }
+  .mode-badge {
+    font-size: 11px; font-weight: 700; padding: 2px 8px;
+    border-radius: 4px; letter-spacing: .3px;
+  }
+  .mode-badge.local { background: rgba(34,197,94,.15); color: var(--green); }
+  .mode-badge.llm   { background: rgba(99,102,241,.15); color: var(--accent); }
+  .mode-desc { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -254,6 +273,26 @@ HTML_PAGE = """<!DOCTYPE html>
 
     </div>
 
+    <div class="mode-row">
+      <label class="mode-label">Extraction Mode</label>
+      <div class="mode-toggle">
+        <label class="mode-opt">
+          <input type="radio" name="mode" value="local" checked>
+          <span class="mode-badge local">Local</span>
+          <span class="mode-desc">Fast · Private · No API key needed</span>
+        </label>
+        <label class="mode-opt">
+          <input type="radio" name="mode" value="llm">
+          <span class="mode-badge llm">LLM</span>
+          <span class="mode-desc">More accurate · Requires Claude API key</span>
+        </label>
+      </div>
+      <div id="api-key-row" style="display:none; margin-top:10px;">
+        <input type="password" id="api-key-input" placeholder="sk-ant-..."
+               style="width:100%; background:var(--bg); border:1.5px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; padding:10px 12px; outline:none; font-family:inherit;">
+      </div>
+    </div>
+
     <button class="btn" id="eval-btn" onclick="runEval()">
       <span class="spinner" id="spinner"></span>
       <span id="btn-label">Evaluate</span>
@@ -274,6 +313,7 @@ HTML_PAGE = """<!DOCTYPE html>
           <h2 id="score-label"></h2>
           <p id="cv-summary-txt"></p>
           <p id="jd-summary-txt" style="margin-top:2px"></p>
+          <p id="report-mode" style="margin-top:4px; font-size:11px; opacity:.5"></p>
           <div class="summary-row" id="score-pills"></div>
         </div>
       </div>
@@ -331,9 +371,26 @@ async function runEval() {
   sp.style.display = 'block';
   lbl.textContent = 'Analyzing…';
 
+  var mode = document.querySelector('input[name="mode"]:checked').value;
+
+  if (mode === 'llm') {
+    var apiKey = document.getElementById('api-key-input').value.trim();
+    if (!apiKey) {
+      showError('LLM mode requires a Claude API key (sk-ant-...).');
+      btn.disabled = false; sp.style.display = 'none'; lbl.textContent = 'Evaluate';
+      return;
+    }
+  }
+
   var form = new FormData();
   form.append('cv_file', file);
   form.append('jd_text', jd);
+  form.append('mode', mode);
+
+  if (mode === 'llm') {
+    var apiKey = document.getElementById('api-key-input').value.trim();
+    form.append('api_key', apiKey);
+  }
 
   try {
     var res  = await fetch('/evaluate', { method: 'POST', body: form });
@@ -360,6 +417,9 @@ function renderReport(d) {
   document.getElementById('score-label').textContent = lbl;
   document.getElementById('cv-summary-txt').textContent = d.cv_summary;
   document.getElementById('jd-summary-txt').textContent = d.jd_summary;
+
+  var modeEl = document.getElementById('report-mode');
+  if (modeEl) modeEl.textContent = 'Mode: ' + (d.extraction_mode || 'local');
 
   var pills = document.getElementById('score-pills');
   pills.innerHTML = '';
@@ -447,6 +507,13 @@ function hideError()    { document.getElementById('error-box').style.display = '
 
 document.getElementById('jd-text').addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key === 'Enter') runEval();
+});
+
+document.querySelectorAll('input[name="mode"]').forEach(function(radio) {
+  radio.addEventListener('change', function() {
+    var apiRow = document.getElementById('api-key-row');
+    apiRow.style.display = this.value === 'llm' ? 'block' : 'none';
+  });
 });
 </script>
 </body>

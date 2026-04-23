@@ -56,10 +56,17 @@ def test_missing_cv_file(jd_file, mock_client_and_data, tmp_path):
     assert result.exit_code != 0
 
 
-def test_missing_api_key(cv_file, jd_file):
-    with patch("ats_evaluator.cli.get_api_key", side_effect=__import__("ats_evaluator.errors", fromlist=["ConfigurationError"]).ConfigurationError("No key")):
-        result = runner.invoke(app, ["evaluate", str(cv_file), str(jd_file)])
+def test_missing_api_key_llm_mode(cv_file, jd_file):
+    from ats_evaluator.errors import ConfigurationError
+    with patch("ats_evaluator.cli.get_api_key", side_effect=ConfigurationError("No key")):
+        result = runner.invoke(app, ["evaluate", str(cv_file), str(jd_file), "--mode", "llm"])
         assert result.exit_code == 3
+
+
+def test_local_mode_no_api_key_needed(cv_file, jd_file, mock_client_and_data):
+    # local mode should succeed even without patching get_api_key
+    result = runner.invoke(app, ["evaluate", str(cv_file), str(jd_file), "--mode", "local"])
+    assert result.exit_code == 0
 
 
 def test_version_command():

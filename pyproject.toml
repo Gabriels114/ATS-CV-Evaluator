@@ -15,6 +15,7 @@ dependencies = [
     "typer[all]>=0.12",
     "python-dateutil>=2.9",
     "jsonschema>=4.23",
+    # spacy is optional — install via: pip install ats-evaluator[local-nlp]
 ]
 
 [project.scripts]
@@ -22,6 +23,9 @@ ats = "ats_evaluator.cli:app"
 
 [project.optional-dependencies]
 fuzzy = ["rapidfuzz>=3.9"]
+local-nlp = [
+    "spacy>=3.7",
+]
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -46,6 +50,13 @@ addopts = "--cov=ats_evaluator --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 source = ["src/ats_evaluator"]
+
+[tool.coverage.report]
+omit = [
+    "*/web/ui.py",           # static HTML string — no logic to test
+    "*/extraction/llm/*",    # covered via integration; mocked in unit tests
+    "*/scoring/dimensions/base.py",  # Protocol definition only
+]
 
 [tool.ruff]
 line-length = 100
