@@ -11,6 +11,7 @@ def extract_cv(
     client: ClaudeClient | None = None,
     mode: ExtractionMode = ExtractionMode.LOCAL,
 ):
+    """Extracts structured CVData from raw text using the specified backend (local or LLM)."""
     if mode == ExtractionMode.LLM:
         if client is None:
             raise ConfigurationError("LLM mode requires a ClaudeClient instance.")
@@ -23,6 +24,7 @@ def extract_jd(
     client: ClaudeClient | None = None,
     mode: ExtractionMode = ExtractionMode.LOCAL,
 ):
+    """Extracts structured JobDescription from raw text using the specified backend (local or LLM)."""
     if mode == ExtractionMode.LLM:
         if client is None:
             raise ConfigurationError("LLM mode requires a ClaudeClient instance.")

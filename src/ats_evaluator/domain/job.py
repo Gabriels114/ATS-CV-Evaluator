@@ -5,6 +5,8 @@ from .enums import SeniorityLevel
 
 @dataclass(frozen=True, slots=True)
 class JobDescription:
+    """Immutable structured representation of an extracted job description."""
+
     title: str
     seniority: SeniorityLevel
     required_hard_skills: tuple[str, ...]

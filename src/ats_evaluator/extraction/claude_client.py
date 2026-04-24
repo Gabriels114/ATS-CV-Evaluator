@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -17,8 +18,12 @@ from ..config import (
 )
 from ..errors import ExtractionError, InvalidExtractionError
 
+_log = logging.getLogger(__name__)
+
 
 class ClaudeClient:
+    """Thin wrapper around the Anthropic SDK with retry logic and optional disk caching."""
+
     def __init__(self, api_key: str, model: str = MODEL_ID, use_cache: bool = True) -> None:
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
@@ -30,6 +35,7 @@ class ClaudeClient:
         user_prompt: str,
         tool_schema: dict[str, Any],
     ) -> dict[str, Any]:
+        """Call Claude with forced tool use and return the parsed tool-input dict."""
         cache_key = self._cache_key(system_prompt, user_prompt, tool_schema)
         if self._use_cache:
             cached = self._load_cache(cache_key)
@@ -50,6 +56,7 @@ class ClaudeClient:
         tool_schema: dict[str, Any],
         validation_error: str | None = None,
     ) -> dict[str, Any]:
+        """Invoke the Claude API with exponential back-off on rate-limit errors."""
         prompt = user_prompt
         if validation_error:
             prompt = (
@@ -96,21 +103,25 @@ class ClaudeClient:
         )
 
     def _cache_key(self, system: str, user: str, schema: dict[str, Any]) -> str:
+        """Compute a deterministic SHA-256 cache key from the prompt and schema."""
         payload = json.dumps([system, user, schema, PROMPT_VERSION], sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def _load_cache(self, key: str) -> dict[str, Any] | None:
+        """Return cached extraction result for key, or None on miss or decode error."""
         path = CACHE_DIR / f"{key}.json"
         if path.exists():
             try:
                 return json.loads(path.read_text())
-            except Exception:
+            except Exception as exc:
+                _log.warning("Cache read failed for key %s: %s", key, exc)
                 return None
         return None
 
     def _save_cache(self, key: str, data: dict[str, Any]) -> None:
+        """Persist extraction result to disk; logs a warning on failure (best-effort)."""
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
             (CACHE_DIR / f"{key}.json").write_text(json.dumps(data, ensure_ascii=False))
-        except Exception:
-            pass  # caching is best-effort
+        except Exception as exc:
+            _log.warning("Cache write failed for key %s: %s", key, exc)

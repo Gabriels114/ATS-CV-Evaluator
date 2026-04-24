@@ -8,10 +8,14 @@ from .base import DocumentParser, ParsedDocument
 
 
 class DocxParser:
+    """Extracts text (paragraphs and tables) from DOCX files using python-docx."""
+
     def can_parse(self, path: Path) -> bool:
+        """Return True when the file has a .docx extension."""
         return path.suffix.lower() == ".docx"
 
     def parse(self, path: Path) -> ParsedDocument:
+        """Extract raw text and parse quality from a DOCX; raises UnparseableDocumentError on failure."""
         try:
             doc = Document(str(path))
         except Exception as exc:

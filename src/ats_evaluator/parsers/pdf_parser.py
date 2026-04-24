@@ -8,10 +8,14 @@ from .base import DocumentParser, ParsedDocument
 
 
 class PdfParser:
+    """Extracts text and quality metadata from PDF files using pdfplumber."""
+
     def can_parse(self, path: Path) -> bool:
+        """Return True when the file has a .pdf extension."""
         return path.suffix.lower() == ".pdf"
 
     def parse(self, path: Path) -> ParsedDocument:
+        """Extract raw text and parse quality from a PDF; raises UnparseableDocumentError on failure."""
         pages_text: list[str] = []
         page_count = 0
         tables_detected = False

@@ -11,7 +11,7 @@ class ExtractionError(ATSError):
 
 
 class InvalidExtractionError(ExtractionError):
-    """Raised when Claude's output fails schema validation after retries."""
+    """Raised when Claude's output fails schema validation after all retries are exhausted."""
 
 
 class ConfigurationError(ATSError):

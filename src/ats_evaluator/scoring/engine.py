@@ -10,6 +10,7 @@ from .dimensions import ALL_SCORERS
 
 
 def score(cv: CVData, jd: JobDescription) -> ScoreReport:
+    """Evaluate a CV against a job description and return a full scored report."""
     dimensions = tuple(scorer.score(cv, jd) for scorer in ALL_SCORERS)
     total = round(sum(d.weighted_score for d in dimensions), 2)
     missing = compute_missing_keywords(cv, jd)

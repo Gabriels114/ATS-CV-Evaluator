@@ -8,6 +8,8 @@ from .feedback import MissingKeyword, Suggestion
 
 @dataclass(frozen=True, slots=True)
 class DimensionScore:
+    """Score for a single evaluation dimension (e.g. hard_skills, experience)."""
+
     name: str
     weight: float
     raw_score: float       # 0–100 within this dimension
@@ -17,6 +19,8 @@ class DimensionScore:
 
 @dataclass(frozen=True, slots=True)
 class ScoreReport:
+    """Aggregated ATS evaluation output including scores, gaps, and suggestions."""
+
     total_score: float
     dimensions: tuple[DimensionScore, ...]
     missing_keywords: tuple[MissingKeyword, ...]

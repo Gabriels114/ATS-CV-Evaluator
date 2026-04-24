@@ -65,13 +65,11 @@ def _embed(text: str) -> "ndarray | None":
     if model is None:
         return None
 
-    if text not in _EMBEDDING_CACHE:
-        import numpy as np  # sentence-transformers always pulls numpy
+    import numpy as np  # sentence-transformers always pulls numpy
 
+    if text not in _EMBEDDING_CACHE:
         vec = model.encode(text, batch_size=1)
         _EMBEDDING_CACHE[text] = vec.tolist()
-
-    import numpy as np
 
     return np.array(_EMBEDDING_CACHE[text], dtype=float)
 

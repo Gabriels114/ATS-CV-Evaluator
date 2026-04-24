@@ -4,7 +4,7 @@ import re
 from typing import Final
 
 # Ordered from most specific to least specific to avoid partial overlaps.
-_METRIC_PATTERNS: Final[list[re.Pattern[str]]] = [
+_METRIC_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     # Dollar amounts: $2M, $500K, $1.5B, $200
     re.compile(r"\$\d+(?:\.\d+)?[KMBkmb]?\b"),
     # Percentages: 99.9%, 30%
@@ -32,7 +32,7 @@ _METRIC_PATTERNS: Final[list[re.Pattern[str]]] = [
     # Time savings: 3h, 12 hours, 5 days
     re.compile(r"\b\d+(?:\.\d+)?h\b", re.IGNORECASE),
     re.compile(r"\b\d+(?:\.\d+)?\s+(?:hours?|days?|weeks?|months?)\b", re.IGNORECASE),
-]
+)
 
 
 def extract_metrics(text: str) -> list[str]:

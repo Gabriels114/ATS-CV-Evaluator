@@ -44,7 +44,7 @@ _RE_DEGREE: Final = re.compile(
     r"licenciatura|ingenier[oa]|ingenier[íi]a|associate)\b",
     re.IGNORECASE,
 )
-_RE_GRAD_YEAR: Final = re.compile(r"\b(19[7-9]\d|20[0-2]\d|2030)\b")
+_RE_GRAD_YEAR: Final = re.compile(r"\b(19[7-9]\d|20[0-3]\d)\b")
 _RE_FIELD: Final = re.compile(
     r"\b(computer|software|data|engineering|science|mathematics|physics|"
     r"economics|business|information|systems|cybersecurity|ai|machine learning)\b",
@@ -58,6 +58,8 @@ _MONTHS_LONG: Final = (
     "January|February|March|April|May|June|July|August|"
     "September|October|November|December"
 )
+# NOTE: "May" appears in both _MONTHS_SHORT and _MONTHS_LONG intentionally —
+# the short and long forms are identical for May.
 _RE_DATE_RANGE: Final = re.compile(
     rf"(?:{_MONTHS_SHORT}|{_MONTHS_LONG})[\s,]*(\d{{4}})?\s*[-–]\s*"
     r"((?:" + _MONTHS_SHORT + r"|" + _MONTHS_LONG + r")[\s,]*\d{4}|present|current|now|\d{4})",
@@ -76,6 +78,7 @@ _RE_COMPANY_SEPARATOR: Final = re.compile(r"\s*[\|@]\s*|\bat\s+", re.IGNORECASE)
 # ---------------------------------------------------------------------------
 
 def _extract_contact(text: str) -> ContactInfo:
+    """Extracts email, phone, LinkedIn, GitHub, and location from raw CV text."""
     email_m = _RE_EMAIL.search(text)
     phone_m = _RE_PHONE.search(text)
     linkedin_m = _RE_LINKEDIN.search(text)
@@ -101,6 +104,7 @@ def _extract_contact(text: str) -> ContactInfo:
 # ---------------------------------------------------------------------------
 
 def _looks_like_name_line(line: str) -> bool:
+    """Returns True if the line looks like a person's full name (2–4 capitalized words, no contact signals)."""
     stripped = line.strip()
     if not stripped:
         return False
@@ -115,6 +119,7 @@ def _looks_like_name_line(line: str) -> bool:
 
 
 def _extract_full_name(text: str, spacy_doc: object | None) -> str | None:
+    """Extracts the candidate's full name using spaCy NER when available, falling back to heuristic line scanning."""
     if spacy_doc is not None:
         for ent in spacy_doc.ents:
             if ent.label_ == "PERSON":
@@ -140,6 +145,7 @@ _MONTH_MAP: Final[dict[str, int]] = {
 
 
 def _parse_date_token(token: str) -> date | None:
+    """Parses a date token string into a date object, returning None for "present"/"current"/"now"."""
     token = token.strip().lower()
     if token in ("present", "current", "now"):
         return None
@@ -154,6 +160,7 @@ def _parse_date_token(token: str) -> date | None:
 
 
 def _extract_dates(block: str) -> tuple[date | None, date | None]:
+    """Extracts a (start_date, end_date) pair from a text block; end_date is None for current roles."""
     m = _RE_DATE_RANGE.search(block)
     if m:
         full = m.group(0)
@@ -176,6 +183,7 @@ def _extract_dates(block: str) -> tuple[date | None, date | None]:
 # ---------------------------------------------------------------------------
 
 def _split_experience_blocks(exp_text: str) -> list[str]:
+    """Splits an experience section into individual job-entry blocks, using blank lines or job-title keywords as delimiters."""
     blocks = re.split(r"\n{2,}", exp_text.strip())
     if len(blocks) <= 1:
         lines = exp_text.splitlines()
@@ -194,6 +202,7 @@ def _split_experience_blocks(exp_text: str) -> list[str]:
 
 
 def _extract_company_from_block(lines: list[str], title_idx: int, spacy_doc: object | None) -> str:
+    """Infers the employer name from a job block using spaCy ORG entities or separator/next-line heuristics."""
     if spacy_doc is not None:
         for ent in spacy_doc.ents:
             if ent.label_ == "ORG":
@@ -218,7 +227,8 @@ def _extract_company_from_block(lines: list[str], title_idx: int, spacy_doc: obj
 
 
 def _parse_experience_block(block: str) -> WorkExperience | None:
-    lines = [l for l in block.splitlines() if l.strip()]
+    """Parses a single job-entry text block into a WorkExperience, returning None if no recognizable content."""
+    lines = [line for line in block.splitlines() if line.strip()]
     if not lines:
         return None
 
@@ -270,6 +280,7 @@ def _parse_experience_block(block: str) -> WorkExperience | None:
 # ---------------------------------------------------------------------------
 
 def _parse_education_block(block: str) -> Education | None:
+    """Parses a single education text block into an Education record, returning None if no degree keyword is found."""
     degree_m = _RE_DEGREE.search(block)
     if not degree_m:
         return None
@@ -319,6 +330,9 @@ def extract_cv(raw_text: str, quality: ParseQuality) -> CVData:
     Extracts structured CV data using local NLP only — no external API calls.
     Uses regex, skills taxonomy, and optionally spaCy if installed.
     """
+    if not isinstance(raw_text, str):
+        raw_text = str(raw_text)
+
     sections = detect_sections(raw_text)
 
     doc = None
@@ -360,15 +374,21 @@ def extract_cv(raw_text: str, quality: ParseQuality) -> CVData:
                 if parsed_edu is not None:
                     education = [*education, parsed_edu]
     else:
-        # No section header — extract only lines containing a degree keyword
-        degree_lines: list[str] = []
+        # No section header — extract degree-bearing contexts from the full text.
+        # Track which line indices have already been consumed to prevent duplicate
+        # Education entries when multiple lines in the same block match _RE_DEGREE.
         all_lines = raw_text.splitlines()
+        consumed_up_to: int = -1
         for i, line in enumerate(all_lines):
+            if i <= consumed_up_to:
+                continue
             if _RE_DEGREE.search(line):
-                context = "\n".join(all_lines[max(0, i - 1):i + 3])
+                context_end = i + 3
+                context = "\n".join(all_lines[max(0, i - 1):context_end])
                 parsed_edu = _parse_education_block(context)
                 if parsed_edu is not None:
                     education = [*education, parsed_edu]
+                    consumed_up_to = context_end - 1
 
     certifications: tuple[str, ...] = ()
     cert_text = sections.get("certifications", "")

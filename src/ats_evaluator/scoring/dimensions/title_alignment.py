@@ -63,10 +63,13 @@ def _infer_seniority(title: str) -> SeniorityLevel | None:
 
 
 class TitleAlignmentScorer:
+    """Scores alignment between the candidate's most recent title seniority and the JD seniority."""
+
     name = "title_alignment"
     weight = WEIGHTS["title_alignment"]
 
     def score(self, cv: CVData, jd: JobDescription) -> DimensionScore:
+        """Rank difference between inferred CV seniority and JD seniority drives the score."""
         if not cv.experiences:
             return DimensionScore(
                 name=self.name, weight=self.weight,

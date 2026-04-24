@@ -7,16 +7,24 @@ from typing import Final
 
 _TAXONOMY_PATH: Final[Path] = Path(__file__).parent.parent.parent / "data" / "skills_taxonomy.json"
 
-# Module-level singletons — loaded once on first access.
-_hard_skills: dict[str, list[str]] | None = None
-_soft_skills: list[str] | None = None
+# ---------------------------------------------------------------------------
+# Taxonomy cache — populated once at first call, never mutated afterwards.
+# Stored as a tuple so the reference is immutable after assignment.
+# ---------------------------------------------------------------------------
+_TAXONOMY_CACHE: tuple[dict[str, re.Pattern[str]], tuple[tuple[str, re.Pattern[str]], ...]] | None = None
 
 
-def _load_taxonomy() -> tuple[dict[str, list[str]], list[str]]:
-    global _hard_skills, _soft_skills  # noqa: PLW0603
+def _build_pattern(term: str) -> re.Pattern[str]:
+    """Compiles a word-boundary pattern for a single skill term."""
+    return re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
 
-    if _hard_skills is not None and _soft_skills is not None:
-        return _hard_skills, _soft_skills
+
+def _load_taxonomy() -> tuple[dict[str, re.Pattern[str]], tuple[tuple[str, re.Pattern[str]], ...]]:
+    """Returns (hard_skill_patterns, soft_skill_patterns), loading from disk only once."""
+    global _TAXONOMY_CACHE  # noqa: PLW0603
+
+    if _TAXONOMY_CACHE is not None:
+        return _TAXONOMY_CACHE
 
     try:
         raw = _TAXONOMY_PATH.read_text(encoding="utf-8")
@@ -34,37 +42,30 @@ def _load_taxonomy() -> tuple[dict[str, list[str]], list[str]]:
     if "hard_skills" not in data or "soft_skills" not in data:
         raise ValueError("Taxonomy must contain 'hard_skills' and 'soft_skills' keys.")
 
-    _hard_skills = data["hard_skills"]
-    _soft_skills = data["soft_skills"]
-    return _hard_skills, _soft_skills
+    # Pre-compile one combined alternation pattern per canonical hard skill.
+    hard_patterns: dict[str, re.Pattern[str]] = {}
+    for canonical, aliases in data["hard_skills"].items():
+        all_terms = [canonical, *aliases]
+        combined = "|".join(re.escape(t) for t in all_terms)
+        hard_patterns[canonical] = re.compile(r"\b(?:" + combined + r")\b", re.IGNORECASE)
 
+    # Pre-compile one pattern per soft skill.
+    soft_patterns: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+        (skill.lower(), _build_pattern(skill))
+        for skill in data["soft_skills"]
+    )
 
-def _word_boundary_search(term: str, text: str) -> bool:
-    """Returns True if `term` appears as a whole word in `text` (case-insensitive)."""
-    pattern = r"\b" + re.escape(term) + r"\b"
-    return bool(re.search(pattern, text, re.IGNORECASE))
+    _TAXONOMY_CACHE = (hard_patterns, soft_patterns)
+    return _TAXONOMY_CACHE
 
 
 def match_hard_skills(text: str) -> list[str]:
     """Returns list of canonical hard skill names found in text (lowercase)."""
-    hard_skills, _ = _load_taxonomy()
-
-    matched: list[str] = []
-    for canonical, aliases in hard_skills.items():
-        all_terms = [canonical, *aliases]
-        if any(_word_boundary_search(term, text) for term in all_terms):
-            matched = [*matched, canonical]
-
-    return matched
+    hard_patterns, _ = _load_taxonomy()
+    return [canonical for canonical, pattern in hard_patterns.items() if pattern.search(text)]
 
 
 def match_soft_skills(text: str) -> list[str]:
     """Returns list of soft skill names found in text (lowercase)."""
-    _, soft_skills = _load_taxonomy()
-
-    matched: list[str] = []
-    for skill in soft_skills:
-        if _word_boundary_search(skill, text):
-            matched = [*matched, skill.lower()]
-
-    return matched
+    _, soft_patterns = _load_taxonomy()
+    return [skill for skill, pattern in soft_patterns if pattern.search(text)]

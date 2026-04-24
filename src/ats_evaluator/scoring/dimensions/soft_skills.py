@@ -8,10 +8,13 @@ from ..weights import WEIGHTS
 
 
 class SoftSkillsScorer:
+    """Scores CV soft-skill coverage against the JD's requested soft skills."""
+
     name = "soft_skills"
     weight = WEIGHTS["soft_skills"]
 
     def score(self, cv: CVData, jd: JobDescription) -> DimensionScore:
+        """Percentage of JD soft skills matched; defaults to 100 when JD lists none."""
         if not jd.soft_skills:
             raw_score = 100.0
             matched: set[str] = set()

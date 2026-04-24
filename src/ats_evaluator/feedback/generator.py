@@ -12,6 +12,7 @@ _THRESHOLDS = {"high": 60.0, "medium": 75.0}
 
 
 def _priority_for_score(raw_score: float) -> Priority:
+    """Map a 0–100 dimension score to a HIGH / MEDIUM / LOW priority bucket."""
     if raw_score < _THRESHOLDS["high"]:
         return Priority.HIGH
     if raw_score < _THRESHOLDS["medium"]:
@@ -94,6 +95,7 @@ def generate_suggestions(
     missing: tuple[MissingKeyword, ...],
     contact: ContactInfo | None = None,
 ) -> tuple[Suggestion, ...]:
+    """Produce an ordered tuple of improvement suggestions from dimension scores, missing keywords, and contact gaps."""
     suggestions: list[Suggestion] = []
 
     for dim in sorted(dimensions, key=lambda d: d.raw_score):

@@ -15,6 +15,7 @@ _DEGREE_RANK: dict[str, int] = {
 
 
 def _degree_level(degree: str) -> int:
+    """Map a degree string to a numeric rank (0 = unrecognised, 5 = doctorate)."""
     dl = degree.lower()
     for key, rank in _DEGREE_RANK.items():
         if key in dl:
@@ -23,10 +24,13 @@ def _degree_level(degree: str) -> int:
 
 
 class EducationScorer:
+    """Scores education level and field alignment against JD requirements."""
+
     name = "education"
     weight = WEIGHTS["education"]
 
     def score(self, cv: CVData, jd: JobDescription) -> DimensionScore:
+        """Level score (70%) + field-match bonus (30%) when JD specifies requirements."""
         if not cv.education:
             return DimensionScore(
                 name=self.name, weight=self.weight,

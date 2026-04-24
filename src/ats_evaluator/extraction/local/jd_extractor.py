@@ -14,14 +14,14 @@ _TITLE_LABEL_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?:job\s+title|position|role|title)\s*:\s*(.+)$", re.IGNORECASE
 )
 
-_SENIORITY_PATTERNS: Final[list[tuple[SeniorityLevel, list[str]]]] = [
-    (SeniorityLevel.PRINCIPAL, ["principal", "distinguished", "architect", "vp ", "director", "head of"]),
-    (SeniorityLevel.STAFF,     ["staff", "tech lead", "lead "]),
-    (SeniorityLevel.SENIOR,    ["senior", "sr.", "sr "]),
-    (SeniorityLevel.MID,       ["mid", "mid-level", "ssr", "semi-senior", "intermediate"]),
-    (SeniorityLevel.JUNIOR,    ["junior", "jr.", "entry level", "entry-level", "associate"]),
-    (SeniorityLevel.INTERN,    ["intern", "internship", "trainee", "practicante"]),
-]
+_SENIORITY_PATTERNS: Final[tuple[tuple[SeniorityLevel, tuple[str, ...]], ...]] = (
+    (SeniorityLevel.PRINCIPAL, ("principal", "distinguished", "architect", "vp ", "director", "head of")),
+    (SeniorityLevel.STAFF,     ("staff", "tech lead", "lead ")),
+    (SeniorityLevel.SENIOR,    ("senior", "sr.", "sr ")),
+    (SeniorityLevel.MID,       ("mid", "mid-level", "ssr", "semi-senior", "intermediate")),
+    (SeniorityLevel.JUNIOR,    ("junior", "jr.", "entry level", "entry-level", "associate")),
+    (SeniorityLevel.INTERN,    ("intern", "internship", "trainee", "practicante")),
+)
 
 _REQUIRED_KEYWORDS: Final[tuple[str, ...]] = (
     "required", "must have", "you must", "requirements",
@@ -33,12 +33,12 @@ _PREFERRED_KEYWORDS: Final[tuple[str, ...]] = (
     "desirable", "ideal candidate", "we'd love",
 )
 
-_YEARS_PATTERNS: Final[list[re.Pattern[str]]] = [
+_YEARS_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"(\d+)\s*-\s*\d+\s+years?", re.IGNORECASE),
     re.compile(r"minimum\s+(\d+)\s+years?", re.IGNORECASE),
     re.compile(r"at\s+least\s+(\d+)\s+years?", re.IGNORECASE),
     re.compile(r"(\d+)\+?\s*years?\s*(?:of\s*)?(?:experience|exp)", re.IGNORECASE),
-]
+)
 
 _EDUCATION_DEGREES: Final[tuple[str, ...]] = ("phd", "master", "bachelor", "associate", "degree")
 
@@ -119,7 +119,11 @@ def _split_required_preferred(text: str) -> tuple[str, str]:
 
 
 def _extract_years_experience(text: str) -> int | None:
-    """Returns the minimum years-of-experience value found in text, or None."""
+    """Returns the lowest years-of-experience number found in text, or None if none is present.
+
+    Note: returns the minimum of all matches, which may reflect a per-skill requirement
+    rather than the overall role requirement when multiple year counts appear.
+    """
     found: list[int] = []
     for pattern in _YEARS_PATTERNS:
         for match in pattern.finditer(text):

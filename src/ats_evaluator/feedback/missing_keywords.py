@@ -5,6 +5,7 @@ from ..scoring.keyword_matcher import skills_missing
 
 
 def compute_missing_keywords(cv: CVData, jd: JobDescription) -> tuple[MissingKeyword, ...]:
+    """Return all required and preferred JD skills absent from the CV's hard-skills list."""
     missing_required = skills_missing(cv.hard_skills, jd.required_hard_skills)
     missing_preferred = skills_missing(cv.hard_skills, jd.preferred_hard_skills)
 

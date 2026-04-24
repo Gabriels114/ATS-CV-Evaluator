@@ -14,6 +14,7 @@ _PARSERS: tuple[DocumentParser, ...] = (
 
 
 def get_parser(path: Path) -> DocumentParser:
+    """Return the first registered parser that handles path's extension, or raise UnparseableDocumentError."""
     for parser in _PARSERS:
         if parser.can_parse(path):
             return parser
@@ -24,6 +25,7 @@ def get_parser(path: Path) -> DocumentParser:
 
 
 def parse_document(path: Path) -> ParsedDocument:
+    """Locate a parser for path and return the parsed document; raises FileNotFoundError if absent."""
     if not path.exists():
         raise FileNotFoundError(f"File not found: '{path}'")
     return get_parser(path).parse(path)

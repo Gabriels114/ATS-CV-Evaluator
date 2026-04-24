@@ -8,10 +8,13 @@ from ..weights import WEIGHTS
 
 
 class FormattingScorer:
+    """Scores CV formatting and parse quality using heuristics from the extracted text."""
+
     name = "formatting"
     weight = WEIGHTS["formatting"]
 
     def score(self, cv: CVData, jd: JobDescription) -> DimensionScore:
+        """Delegates to assess_parseability; penalises tables and low character density."""
         raw_score = assess_parseability(cv.raw_text, cv.parse_quality)
 
         return DimensionScore(

@@ -18,6 +18,7 @@ PROMPT_VERSION: Final[str] = "1.0"
 
 
 def get_api_key() -> str:
+    """Read ANTHROPIC_API_KEY from the environment; raise ConfigurationError when absent."""
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
         raise ConfigurationError(

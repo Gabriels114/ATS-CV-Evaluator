@@ -61,8 +61,6 @@ omit = [
     "*/extraction/llm/*",            # covered via integration; mocked in unit tests
     "*/scoring/dimensions/base.py",  # Protocol definition only
     "*/scoring/semantic_matcher.py", # only active when sentence-transformers installed
-    "*/extraction/cv_extractor.py",  # legacy shim replaced by extraction/llm/
-    "*/extraction/jd_extractor.py",  # legacy shim replaced by extraction/llm/
 ]
 
 [tool.ruff]

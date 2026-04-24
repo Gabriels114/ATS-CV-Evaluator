@@ -20,21 +20,25 @@ _NON_ALNUM = re.compile(r"[^a-z0-9 ]")
 
 
 def normalize(skill: str) -> str:
+    """Lowercase, expand known aliases, and strip non-alphanumeric characters."""
     lowered = skill.lower().strip()
     expanded = _ALIASES.get(lowered, lowered)
     return _NON_ALNUM.sub(" ", expanded).strip()
 
 
 def exact_match(a: str, b: str) -> bool:
+    """Return True when two skill strings normalize to the same value."""
     return normalize(a) == normalize(b)
 
 
 def skills_overlap(cv_skills: tuple[str, ...], jd_skills: tuple[str, ...]) -> set[str]:
+    """Return JD skill names (in their original form) that have a normalized match in cv_skills."""
     normalized_cv = {normalize(s) for s in cv_skills}
     return {s for s in jd_skills if normalize(s) in normalized_cv}
 
 
 def skills_missing(cv_skills: tuple[str, ...], jd_skills: tuple[str, ...]) -> list[str]:
+    """Return JD skills (preserving order) that have no normalized match in cv_skills."""
     normalized_cv = {normalize(s) for s in cv_skills}
     return [s for s in jd_skills if normalize(s) not in normalized_cv]
 

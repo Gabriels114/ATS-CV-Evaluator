@@ -6,6 +6,8 @@ from ...domain.scoring import DimensionScore
 
 
 class DimensionScorer(Protocol):
+    """Structural interface for all dimension scorers."""
+
     name: str
     weight: float
 

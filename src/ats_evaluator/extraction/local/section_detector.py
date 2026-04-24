@@ -66,8 +66,9 @@ def _identify_section(line: str) -> str | None:
     if not stripped:
         return None
 
-    # ALL CAPS lines are strong header candidates.
-    if stripped == stripped.upper() and len(stripped) > 2 and stripped.isalpha() is False:
+    # ALL CAPS multi-word lines (contain non-alpha chars like spaces) are strong header candidates.
+    # Single-word all-caps headers (e.g. "SKILLS") fall through to the _HEADER_RE / exact-match paths.
+    if stripped == stripped.upper() and len(stripped) > 2 and not stripped.isalpha():
         candidate = stripped.rstrip(":- \t").lower()
         if candidate in _VARIANT_TO_CANONICAL:
             return _VARIANT_TO_CANONICAL[candidate]

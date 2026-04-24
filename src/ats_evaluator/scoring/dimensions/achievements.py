@@ -7,10 +7,13 @@ from ..weights import WEIGHTS
 
 
 class AchievementsScorer:
+    """Scores the quantity of quantified achievements across all work experiences."""
+
     name = "achievements"
     weight = WEIGHTS["achievements"]
 
     def score(self, cv: CVData, jd: JobDescription) -> DimensionScore:
+        """10 points per quantified metric, capped at 100."""
         total_metrics = sum(len(exp.quantified_metrics) for exp in cv.experiences)
 
         # Each quantified metric is worth 10 points, capped at 100
