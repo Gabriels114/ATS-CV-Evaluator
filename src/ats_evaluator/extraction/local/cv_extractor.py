@@ -41,7 +41,7 @@ _JOB_TITLE_KEYWORDS: Final = re.compile(
 
 _RE_DEGREE: Final = re.compile(
     r"\b(phd|ph\.d|doctor|master|msc|mba|bachelor|bsc|beng|"
-    r"licenciatura|ingeniero|associate)\b",
+    r"licenciatura|ingenier[oa]|ingenier[íi]a|associate)\b",
     re.IGNORECASE,
 )
 _RE_GRAD_YEAR: Final = re.compile(r"\b(19[7-9]\d|20[0-2]\d|2030)\b")
@@ -332,12 +332,19 @@ def extract_cv(raw_text: str, quality: ParseQuality) -> CVData:
     full_name = _extract_full_name(raw_text, doc)
     summary = sections.get("summary") or None
 
-    skills_text = " ".join(filter(None, [sections.get("skills", ""), sections.get("experience", "")]))
+    # Fallback to full text when sections aren't detected (no headers in CV)
+    _fallback = raw_text
+    skills_text = " ".join(filter(None, [
+        sections.get("skills", ""),
+        sections.get("experience", ""),
+        sections.get("other", ""),
+    ])) or _fallback
     hard_skills = tuple(match_hard_skills(skills_text))
-    soft_skills = tuple(match_soft_skills(skills_text))
+    # Soft skills are often scattered in bullet points — scan full text
+    soft_skills = tuple(match_soft_skills(raw_text))
 
     experiences: list[WorkExperience] = []
-    exp_text = sections.get("experience", "")
+    exp_text = sections.get("experience", "") or sections.get("other", "")
     if exp_text:
         for block in _split_experience_blocks(exp_text):
             parsed = _parse_experience_block(block)
@@ -350,6 +357,16 @@ def extract_cv(raw_text: str, quality: ParseQuality) -> CVData:
         for block in re.split(r"\n{2,}", edu_text.strip()):
             if block.strip():
                 parsed_edu = _parse_education_block(block.strip())
+                if parsed_edu is not None:
+                    education = [*education, parsed_edu]
+    else:
+        # No section header — extract only lines containing a degree keyword
+        degree_lines: list[str] = []
+        all_lines = raw_text.splitlines()
+        for i, line in enumerate(all_lines):
+            if _RE_DEGREE.search(line):
+                context = "\n".join(all_lines[max(0, i - 1):i + 3])
+                parsed_edu = _parse_education_block(context)
                 if parsed_edu is not None:
                     education = [*education, parsed_edu]
 

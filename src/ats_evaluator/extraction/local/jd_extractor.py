@@ -74,21 +74,46 @@ def _detect_seniority(text: str) -> SeniorityLevel:
     return SeniorityLevel.MID
 
 
+_PREFERRED_LINE_RE: Final = re.compile(
+    r"^(?:nice\s+to\s+have|preferred|bonus|plus|desirable)\s*:?",
+    re.IGNORECASE,
+)
+_REQUIRED_LINE_RE: Final = re.compile(
+    r"^(?:must\s+have|required|requirements|qualifications|essential)\s*:?",
+    re.IGNORECASE,
+)
+
+
 def _split_required_preferred(text: str) -> tuple[str, str]:
-    """Splits text paragraphs into (required_block, preferred_block)."""
+    """
+    Splits into (required_block, preferred_block).
+    Handles both paragraph-level and inline-section formats
+    ('Nice to have: FastAPI, Redis' on its own line).
+    """
     required_parts: list[str] = []
     preferred_parts: list[str] = []
+    current_mode = "required"
 
-    for para in re.split(r"\n{2,}", text):
-        lowered = para.lower()
-        has_required = any(kw in lowered for kw in _REQUIRED_KEYWORDS)
-        has_preferred = any(kw in lowered for kw in _PREFERRED_KEYWORDS)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _PREFERRED_LINE_RE.match(stripped):
+            current_mode = "preferred"
+            # Include the content after the colon on the same line
+            after = _PREFERRED_LINE_RE.sub("", stripped).strip().lstrip(":").strip()
+            if after:
+                preferred_parts = [*preferred_parts, after]
+            continue
+        if _REQUIRED_LINE_RE.match(stripped):
+            current_mode = "required"
+            after = _REQUIRED_LINE_RE.sub("", stripped).strip().lstrip(":").strip()
+            if after:
+                required_parts = [*required_parts, after]
+            continue
 
-        if has_preferred and not has_required:
-            preferred_parts = [*preferred_parts, para]
+        if current_mode == "preferred":
+            preferred_parts = [*preferred_parts, line]
         else:
-            # Unclassified paragraphs default to required
-            required_parts = [*required_parts, para]
+            required_parts = [*required_parts, line]
 
     return "\n".join(required_parts), "\n".join(preferred_parts)
 
