@@ -16,3 +16,5 @@ build/
 venv/
 ~/.cache/ats/
 ats-env/
+.DS_Store
+*.txt
