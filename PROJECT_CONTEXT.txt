@@ -1,0 +1,258 @@
+==============================================================================
+  ATS CV EVALUATOR — PROJECT CONTEXT (para retomar con Claude)
+  Última actualización: 2026-04-24
+==============================================================================
+
+REPOSITORIO
+  GitHub : https://github.com/Gabriels114/ATS-CV-Evaluator
+  Local  : /Users/gabriels/Proyectos/ATS-CV-Evaluator
+  Rama   : main (128 tests, 82% coverage, verde)
+
+SETUP RÁPIDO
+  cd /Users/gabriels/Proyectos/ATS-CV-Evaluator
+  source ats-env/bin/activate
+  ats serve                        # Web UI en http://127.0.0.1:8000
+  ats evaluate cv.pdf jd.txt       # CLI local
+  ats-env/bin/python -m pytest     # Tests
+
+  IMPORTANTE: si "ats: command not found" después de activar el venv,
+  ejecutar: pip install -e ".[web]"   (el shebang queda stale si renombras el venv)
+
+==============================================================================
+  QUÉ HACE EL PROYECTO
+==============================================================================
+
+Evalúa qué tan bien un CV encaja con una oferta de trabajo (ATS score 0-100).
+Dos modos de extracción:
+  - LOCAL  : 100% local, sin API, regex + taxonomía de skills + spaCy opcional
+  - LLM    : Claude API (claude-sonnet-4-6) con tool-use, más preciso
+
+7 dimensiones con pesos industria:
+  Hard Skills     30%   coincidencia de skills técnicos
+  Experience      25%   años, relevancia, recencia
+  Education       15%   grado, campo, certificaciones
+  Title Alignment 10%   título actual/pasado vs título del JD
+  Achievements    10%   logros cuantificados
+  Soft Skills      5%   liderazgo, comunicación, etc.
+  Formatting       5%   legibilidad ATS (headers, bullets, espaciado)
+
+Umbrales de interpretación:
+  80+  → Strong Match   (pasa filtros ATS, probable entrevista)
+  60-79 → Acceptable   (cubre requisitos clave)
+  40-59 → At Risk       (faltan skills importantes)
+  <40  → Low Match      (probable rechazo automático)
+
+==============================================================================
+  ARQUITECTURA
+==============================================================================
+
+src/ats_evaluator/
+├── domain/              Frozen dataclasses — modelos inmutables
+│   ├── cv.py            CVData, ContactInfo, WorkExperience, Education, ParseQuality
+│   ├── job.py           JobDescription
+│   ├── scoring.py       ScoreReport, DimensionScore
+│   ├── feedback.py      MissingKeyword, Suggestion, Severity
+│   └── enums.py         SeniorityLevel, SkillLevel
+│
+├── parsers/             Parsing de documentos
+│   ├── base.py          ParsedDocument dataclass + Parser protocol
+│   ├── pdf_parser.py    pdfplumber
+│   ├── docx_parser.py   python-docx
+│   ├── text_parser.py   TXT/MD
+│   ├── parser_factory.py  despacho por extensión
+│   └── format_quality.py  ATS readability scoring
+│
+├── extraction/          Extracción estructurada CV/JD
+│   ├── __init__.py      API pública: extract_cv(raw_text, quality, client, mode)
+│   │                                  extract_jd(raw_text, client, mode)
+│   ├── mode.py          ExtractionMode(str, Enum): LOCAL | LLM
+│   ├── claude_client.py  Cliente Anthropic con cache SHA256
+│   ├── local/           Extracción 100% local
+│   │   ├── cv_extractor.py    regex + spaCy opcional
+│   │   ├── jd_extractor.py    regex, required/preferred split
+│   │   ├── section_detector.py  detect_sections(text) → dict[str,str]
+│   │   ├── skills_db.py       match_hard_skills / match_soft_skills
+│   │   │                      (regexes precompilados en módulo, O(1) match)
+│   │   └── metrics_extractor.py  logros cuantificados
+│   ├── llm/             Extracción via Claude API
+│   │   ├── cv_extractor.py
+│   │   └── jd_extractor.py
+│   ├── prompts/         Prompts + schemas Pydantic para tool-use
+│   └── response_validator.py
+│
+├── scoring/             Motor de scoring
+│   ├── engine.py        pipeline principal → ScoreReport
+│   ├── weights.py       WEIGHTS dict (las 7 dimensiones)
+│   ├── keyword_matcher.py  skills_missing / skills_overlap / enhanced (semántico)
+│   ├── semantic_matcher.py  all-MiniLM-L6-v2, lazy-load, graceful fallback
+│   ├── recency.py       decay exponencial: 1.0 → 0.3 en 10 años
+│   └── dimensions/
+│       ├── hard_skills.py   placement boost 1.3x (summary/skills section)
+│       ├── experience.py    years + recency, date.today() en runtime
+│       ├── education.py
+│       ├── title_alignment.py  40+ variantes por nivel, ES+EN
+│       ├── achievements.py
+│       ├── soft_skills.py
+│       └── formatting.py
+│
+├── feedback/
+│   ├── generator.py       generate_suggestions(dimensions, missing, contact)
+│   └── missing_keywords.py  compute_missing_keywords(cv, jd)
+│
+├── reporting/
+│   ├── terminal.py        Rich TUI output
+│   └── json_export.py     serialización JSON
+│
+├── web/
+│   ├── app.py             FastAPI: GET / → HTML, POST /evaluate → JSON
+│   └── ui.py              Single-page HTML+CSS+JS (inline, sin framework)
+│
+├── cli.py                 Typer CLI: `ats evaluate` | `ats serve` | `ats version`
+├── config.py              Variables de entorno (ANTHROPIC_API_KEY, etc.)
+└── errors.py              Excepciones custom (ConfigurationError, ParseError, etc.)
+
+FLUJO DE DATOS
+  Archivo(s)
+      ↓ parsers/parser_factory.py
+  ParsedDocument(raw_text, quality)
+      ↓ extraction/__init__.py  [LOCAL o LLM]
+  CVData + JobDescription
+      ↓ scoring/engine.py
+  ScoreReport(total_score, dimensions)
+      ↓ feedback/generator.py + feedback/missing_keywords.py
+  Suggestions + MissingKeywords
+      ↓ reporting/ o web/app.py
+  Output (terminal / JSON / HTTP response)
+
+==============================================================================
+  TESTS
+==============================================================================
+
+tests/
+├── conftest.py                  fixtures: senior_backend_cv, senior_python_jd
+├── unit/
+│   ├── domain/test_immutability.py
+│   ├── scoring/
+│   │   ├── test_dimensions.py
+│   │   ├── test_engine.py
+│   │   ├── test_hard_skills.py
+│   │   ├── test_keyword_matcher.py
+│   │   ├── test_recency.py
+│   │   └── test_semantic_and_contact.py
+│   ├── test_config.py
+│   ├── test_local_extractors.py    40+ tests de extracción local
+│   ├── test_parsers.py
+│   ├── test_reporting.py
+│   └── test_response_validator.py
+├── integration/
+│   ├── test_score_pipeline.py
+│   └── test_web_app.py             TestClient FastAPI, mocks parse_document+extract_*
+└── e2e/
+    └── test_cli.py                 subprocess CLI tests
+
+Estado: 128 passed, 82% coverage, --cov-fail-under=80
+
+CORRER TESTS
+  ats-env/bin/python -m pytest               # todos + coverage
+  ats-env/bin/python -m pytest tests/unit/   # solo unit
+  ats-env/bin/python -m pytest -k "test_hard_skills" -vv   # filtrar
+
+==============================================================================
+  DEPENDENCIAS CLAVE
+==============================================================================
+
+Core (siempre):
+  anthropic>=0.40      Claude API (LLM mode)
+  pdfplumber>=0.11     PDF parsing
+  python-docx>=1.1     DOCX parsing
+  rich>=13.0           Terminal UI
+  typer>=0.12          CLI
+  python-dateutil>=2.9 Date parsing
+  jsonschema>=4.23     Response validation
+
+Opcionales:
+  [web]      fastapi, uvicorn, python-multipart
+  [semantic] sentence-transformers, scikit-learn  (all-MiniLM-L6-v2)
+  [local-nlp] spacy (en_core_web_sm)
+  [fuzzy]    rapidfuzz
+  [dev]      pytest, pytest-cov, ruff, mypy
+
+==============================================================================
+  DECISIONES DE DISEÑO IMPORTANTES
+==============================================================================
+
+1. INMUTABILIDAD: todos los modelos son @dataclass(frozen=True, slots=True).
+   Nunca mutar, siempre crear instancias nuevas.
+
+2. SKILLS_DB precompilado: las regexes de matching se compilan una vez al
+   importar el módulo. No recompilar en cada llamada (era O(n×m), ahora O(1)).
+
+3. PLACEMENT BOOST: skills encontradas en sección summary o skills del CV
+   reciben multiplicador 1.3x en el score de hard_skills.
+
+4. RECENCY DECAY: experiencia reciente (< 2 años) → factor 1.0.
+   Decae exponencialmente hasta ~0.3 para experiencias de > 10 años.
+
+5. date.today() DENTRO de score(): no como constante de módulo. Así los tests
+   no dependen de cuándo se importó el módulo.
+
+6. WEB TEMP FILES: el endpoint /evaluate usa try/finally para garantizar
+   limpieza del archivo temporal del CV aunque ocurra una excepción.
+
+7. SEMANTIC MATCHER: lazy-load en primer uso, graceful fallback si
+   sentence-transformers no está instalado (devuelve set vacío / 0.0).
+
+8. CONTACT SUGGESTIONS: la función generate_suggestions() acepta
+   contact: ContactInfo | None para sugerir agregar email/LinkedIn/teléfono.
+
+==============================================================================
+  BUGS CONOCIDOS / RESUELTOS (historial útil)
+==============================================================================
+
+✅ "developer" en MID synonyms causaba que "Junior Developer" → MID.
+   Solución: "developer" eliminado de MID synonyms en title_alignment.py.
+
+✅ Duplicate Education entries cuando múltiples líneas del mismo bloque
+   coincidían con _RE_DEGREE. Solución: consumed_up_to high-water mark.
+
+✅ _split_required_preferred sólo separaba en double newlines, no detectaba
+   "Nice to have: X, Y" inline. Solución: scan línea a línea con regex.
+
+✅ Stale module-level _TODAY = date.today() en experience.py. Estaba al importar.
+   Solución: llamar date.today() dentro de score() y pasarla como parámetro.
+
+✅ SyntaxWarning en JS template literals dentro de strings Python.
+   Solución: usar createElement/textContent en lugar de template literals JS.
+
+✅ "ats: command not found" aunque el venv esté activado.
+   Causa: shebang del script apunta al venv viejo si se renombra.
+   Solución: pip install -e ".[web]" (reinstala y regenera el script).
+
+==============================================================================
+  POSIBLES MEJORAS FUTURAS (no implementadas)
+==============================================================================
+
+- OCR para CVs escaneados (imagen-PDF) → integrar pytesseract o similar
+- Soporte de idioma español en spaCy (es_core_news_sm)
+- Batch evaluation: evaluar múltiples CVs contra un JD de una sola vez
+- Dashboard histórico: guardar evaluaciones anteriores en SQLite
+- Exportar a PDF el reporte de evaluación
+- Cache de embeddings semánticos en disco (hoy es sólo en memoria)
+- GitHub Actions CI para correr pytest en cada PR
+- Dockerizar la web UI para deploy fácil
+- Expandir taxonomía de skills (hoy: ~80 hard skills, 28 soft skills)
+- Modo "diff": comparar dos versiones del mismo CV
+
+==============================================================================
+  COMANDOS FRECUENTES
+==============================================================================
+
+source ats-env/bin/activate
+ats serve                              # Web UI
+ats evaluate cv.pdf jd.txt             # CLI local
+ats evaluate cv.pdf jd.txt --mode llm  # CLI LLM
+ats evaluate cv.pdf jd.txt --json report.json  # exportar JSON
+ats-env/bin/python -m pytest -q        # tests rápidos
+ats-env/bin/python -m pytest --cov-report=html  # coverage HTML → htmlcov/
+git log --oneline -10                  # commits recientes
+git push origin main                   # subir cambios

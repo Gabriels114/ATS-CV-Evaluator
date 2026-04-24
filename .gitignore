@@ -18,3 +18,4 @@ venv/
 ats-env/
 .DS_Store
 *.txt
+!PROJECT_CONTEXT.txt
