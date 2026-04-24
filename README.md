@@ -24,11 +24,14 @@
 ## Quick Start
 
 ```bash
-# Install (no API key needed for local mode)
-pip install ats-evaluator
-source ats-env/bin/activate  # or your venv
+# Clone and set up
+git clone https://github.com/Gabriels114/ATS-CV-Evaluator.git
+cd ATS-CV-Evaluator
+python -m venv ats-env
+source ats-env/bin/activate   # Windows: ats-env\Scripts\activate
+pip install -e ".[web]"
 
-# Evaluate with local extraction (default, instant)
+# Evaluate with local extraction (default, instant, no API key needed)
 ats evaluate cv.pdf jd.txt
 
 # Or use Claude for higher accuracy (requires ANTHROPIC_API_KEY)
@@ -36,6 +39,7 @@ ats evaluate cv.pdf jd.txt --mode llm
 
 # Start web UI
 ats serve
+# → open http://127.0.0.1:8000
 ```
 
 ## Installation
@@ -413,6 +417,16 @@ Ensure the PDF is searchable (not scanned/image-based). Convert with Adobe Acrob
 
 ```bash
 pip install ats-evaluator[web]
+```
+
+### "ats: command not found" after activating the venv
+
+This happens when the package was installed into a venv with a different name (e.g., `.venv`) and the `ats` script's shebang points to the old path. Fix it by reinstalling:
+
+```bash
+source ats-env/bin/activate
+pip install -e ".[web]"
+ats --help   # should now work
 ```
 
 ### Tests failing
