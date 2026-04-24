@@ -13,7 +13,7 @@ def score(cv: CVData, jd: JobDescription) -> ScoreReport:
     dimensions = tuple(scorer.score(cv, jd) for scorer in ALL_SCORERS)
     total = round(sum(d.weighted_score for d in dimensions), 2)
     missing = compute_missing_keywords(cv, jd)
-    suggestions = generate_suggestions(dimensions, missing)
+    suggestions = generate_suggestions(dimensions, missing, contact=cv.contact)
 
     cv_summary = f"{cv.full_name or 'Candidate'} — {len(cv.experiences)} roles, {len(cv.hard_skills)} hard skills"
     jd_summary = f"{jd.title} ({jd.seniority.value}) — {len(jd.required_hard_skills)} required skills"

@@ -1,5 +1,12 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..domain.feedback import MissingKeyword, Priority, Severity, Suggestion
 from ..domain.scoring import DimensionScore
+
+if TYPE_CHECKING:
+    from ..domain.cv import ContactInfo
 
 _THRESHOLDS = {"high": 60.0, "medium": 75.0}
 
@@ -51,9 +58,41 @@ _MESSAGES: dict[str, dict[str, str]] = {
 }
 
 
+def _contact_suggestions(contact: ContactInfo | None) -> list[Suggestion]:
+    """Returns HIGH/MEDIUM/LOW suggestions for missing contact fields."""
+    if contact is None:
+        return []
+
+    suggestions: list[Suggestion] = []
+
+    if contact.email is None:
+        suggestions.append(Suggestion(
+            dimension="contact",
+            priority=Priority.HIGH,
+            message="Add your email address — ATS systems parse contact info first and may discard CVs without it.",
+        ))
+
+    if contact.linkedin is None:
+        suggestions.append(Suggestion(
+            dimension="contact",
+            priority=Priority.MEDIUM,
+            message="Add your LinkedIn URL — most ATS systems use it for profile verification.",
+        ))
+
+    if contact.phone is None:
+        suggestions.append(Suggestion(
+            dimension="contact",
+            priority=Priority.LOW,
+            message="Consider adding a phone number for recruiter outreach.",
+        ))
+
+    return suggestions
+
+
 def generate_suggestions(
     dimensions: tuple[DimensionScore, ...],
     missing: tuple[MissingKeyword, ...],
+    contact: ContactInfo | None = None,
 ) -> tuple[Suggestion, ...]:
     suggestions: list[Suggestion] = []
 
@@ -72,5 +111,7 @@ def generate_suggestions(
             priority=Priority.HIGH,
             message=f"Missing required skills: {kws}. Add concrete experience or projects with these technologies.",
         ))
+
+    suggestions.extend(_contact_suggestions(contact))
 
     return tuple(suggestions)

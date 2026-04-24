@@ -37,3 +37,28 @@ def skills_overlap(cv_skills: tuple[str, ...], jd_skills: tuple[str, ...]) -> se
 def skills_missing(cv_skills: tuple[str, ...], jd_skills: tuple[str, ...]) -> list[str]:
     normalized_cv = {normalize(s) for s in cv_skills}
     return [s for s in jd_skills if normalize(s) not in normalized_cv]
+
+
+def skills_overlap_enhanced(
+    cv_skills: tuple[str, ...],
+    jd_skills: tuple[str, ...],
+) -> set[str]:
+    """Combine exact/alias matching + semantic matching.
+
+    Returns JD skill names that match (exactly or semantically) any CV skill.
+    """
+    from .semantic_matcher import semantic_skills_overlap
+
+    exact = skills_overlap(cv_skills, jd_skills)
+    semantic = semantic_skills_overlap(cv_skills, jd_skills)
+    return exact | semantic
+
+
+def skills_missing_enhanced(
+    cv_skills: tuple[str, ...],
+    jd_skills: tuple[str, ...],
+) -> list[str]:
+    """Return JD skills not matched by exact OR semantic matching."""
+    matched = skills_overlap_enhanced(cv_skills, jd_skills)
+    normalized_matched = {normalize(s) for s in matched}
+    return [s for s in jd_skills if normalize(s) not in normalized_matched]

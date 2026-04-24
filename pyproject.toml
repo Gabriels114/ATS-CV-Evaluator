@@ -26,6 +26,10 @@ fuzzy = ["rapidfuzz>=3.9"]
 local-nlp = [
     "spacy>=3.7",
 ]
+semantic = [
+    "sentence-transformers>=3.0",
+    "scikit-learn>=1.4",
+]
 web = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -53,9 +57,12 @@ source = ["src/ats_evaluator"]
 
 [tool.coverage.report]
 omit = [
-    "*/web/ui.py",           # static HTML string — no logic to test
-    "*/extraction/llm/*",    # covered via integration; mocked in unit tests
+    "*/web/ui.py",                   # static HTML string — no logic to test
+    "*/extraction/llm/*",            # covered via integration; mocked in unit tests
     "*/scoring/dimensions/base.py",  # Protocol definition only
+    "*/scoring/semantic_matcher.py", # only active when sentence-transformers installed
+    "*/extraction/cv_extractor.py",  # legacy shim replaced by extraction/llm/
+    "*/extraction/jd_extractor.py",  # legacy shim replaced by extraction/llm/
 ]
 
 [tool.ruff]

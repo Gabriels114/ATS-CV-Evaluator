@@ -1,4 +1,5 @@
 from types import MappingProxyType
+from typing import Final
 
 from ...domain.cv import CVData
 from ...domain.enums import SeniorityLevel
@@ -6,20 +7,57 @@ from ...domain.job import JobDescription
 from ...domain.scoring import DimensionScore
 from ..weights import WEIGHTS
 
-_TITLE_KEYWORDS: dict[SeniorityLevel, list[str]] = {
-    SeniorityLevel.INTERN:    ["intern", "trainee", "practicante", "becario"],
-    SeniorityLevel.JUNIOR:    ["junior", "jr", "entry", "associate"],
-    SeniorityLevel.MID:       ["mid", "middle", "ssr", "semi-senior"],
-    SeniorityLevel.SENIOR:    ["senior", "sr"],
-    SeniorityLevel.STAFF:     ["staff", "lead", "tech lead"],
-    SeniorityLevel.PRINCIPAL: ["principal", "distinguished", "architect", "director"],
+_TITLE_SYNONYMS: Final[dict[SeniorityLevel, list[str]]] = {
+    SeniorityLevel.INTERN: [
+        "intern", "internship", "trainee", "practicante", "becario",
+        "student developer", "co-op", "apprentice",
+    ],
+    SeniorityLevel.JUNIOR: [
+        "junior", "jr", "jr.", "entry level", "entry-level", "associate",
+        "associate engineer", "graduate", "new grad", "early career",
+        "software developer i", "engineer i",
+    ],
+    SeniorityLevel.MID: [
+        "mid", "mid-level", "mid level", "ssr", "semi-senior",
+        "intermediate", "software developer ii", "engineer ii",
+        "software engineer",
+        # "developer" intentionally excluded: too generic, causes false MID on "Junior Developer"
+    ],
+    SeniorityLevel.SENIOR: [
+        "senior", "sr", "sr.", "senior engineer", "senior developer",
+        "software developer iii", "engineer iii", "experienced",
+    ],
+    SeniorityLevel.STAFF: [
+        "staff", "tech lead", "technical lead", "lead engineer",
+        "lead developer", "team lead", "engineering lead",
+        "senior staff", "staff software engineer",
+    ],
+    SeniorityLevel.PRINCIPAL: [
+        "principal", "distinguished", "architect", "software architect",
+        "solutions architect", "vp of engineering", "director of engineering",
+        "head of engineering", "chief engineer", "fellow", "engineering fellow",
+        "vp", "director", "head of",
+    ],
 }
 
 
 def _infer_seniority(title: str) -> SeniorityLevel | None:
+    """
+    Infers seniority from a job title using the synonym map.
+    Checks PRINCIPAL first (highest priority) down to INTERN.
+    Returns None if no match found.
+    """
     tl = title.lower()
-    for level, keywords in _TITLE_KEYWORDS.items():
-        if any(kw in tl for kw in keywords):
+    for level in [
+        SeniorityLevel.PRINCIPAL,
+        SeniorityLevel.STAFF,
+        SeniorityLevel.SENIOR,
+        SeniorityLevel.MID,
+        SeniorityLevel.JUNIOR,
+        SeniorityLevel.INTERN,
+    ]:
+        synonyms = _TITLE_SYNONYMS.get(level, [])
+        if any(syn in tl for syn in synonyms):
             return level
     return None
 
